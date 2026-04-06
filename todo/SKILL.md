@@ -1,12 +1,12 @@
 ---
 name: todo
 description: Use when the user asks to add, list, complete, remove, or manage todos, tasks, or reminders. Supports work and personal lists in Apple Reminders.
-version: 1.0.0
+version: 1.1.0
 ---
 
 # Todo Skill
 
-This skill manages todos in Apple Reminders via JXA (JavaScript for Automation) using `osascript`. It maintains two lists: **Work** and **Personal**.
+This skill manages todos in Apple Reminders via JXA (JavaScript for Automation) using `osascript`. It maintains two lists: **Work** and **Personal**, always scoped to the **iCloud** account so they sync across all Apple devices.
 
 ## Prerequisites
 
@@ -27,17 +27,28 @@ This skill manages todos in Apple Reminders via JXA (JavaScript for Automation) 
 
 The **first argument always determines the action or target list** — never infer or guess which list.
 
+## Important: Always Use the iCloud Account
+
+Always scope all operations to `app.accounts.byName("iCloud")`. The machine may have multiple accounts (e.g. Exchange/work). Using `app.lists.byName(...)` directly may resolve to the wrong account.
+
+```javascript
+const app = Application("Reminders");
+const icloud = app.accounts.byName("iCloud");
+// use icloud.lists.byName(...) for all operations
+```
+
 ## Setup: Ensure Lists Exist
 
-Run this once (or always before operating) to ensure the Work and Personal lists exist:
+Run this before any operation to ensure the Work and Personal lists exist under iCloud:
 
 ```bash
 osascript -l JavaScript -e '
 const app = Application("Reminders");
-const existing = app.lists().map(l => l.name());
+const icloud = app.accounts.byName("iCloud");
+const existing = icloud.lists().map(l => l.name());
 ["Work", "Personal"].forEach(name => {
   if (!existing.includes(name)) {
-    app.lists.push(app.List({ name }));
+    icloud.lists.push(app.List({ name }));
   }
 });
 "OK";
@@ -50,7 +61,8 @@ const existing = app.lists().map(l => l.name());
 # /todo work Buy coffee
 osascript -l JavaScript -e '
 const app = Application("Reminders");
-const list = app.lists.byName("Work");
+const icloud = app.accounts.byName("iCloud");
+const list = icloud.lists.byName("Work");
 list.reminders.push(app.Reminder({ name: "Buy coffee" }));
 "Added to Work";
 '
@@ -58,7 +70,8 @@ list.reminders.push(app.Reminder({ name: "Buy coffee" }));
 # /todo personal Call mom
 osascript -l JavaScript -e '
 const app = Application("Reminders");
-const list = app.lists.byName("Personal");
+const icloud = app.accounts.byName("iCloud");
+const list = icloud.lists.byName("Personal");
 list.reminders.push(app.Reminder({ name: "Call mom" }));
 "Added to Personal";
 '
@@ -69,7 +82,8 @@ To add with a **due date**, include it in the Reminder object:
 ```bash
 osascript -l JavaScript -e '
 const app = Application("Reminders");
-const list = app.lists.byName("Work");
+const icloud = app.accounts.byName("iCloud");
+const list = icloud.lists.byName("Work");
 list.reminders.push(app.Reminder({
   name: "Submit report",
   dueDate: new Date("2026-04-07T10:00:00")
@@ -84,9 +98,10 @@ list.reminders.push(app.Reminder({
 # Both lists
 osascript -l JavaScript -e '
 const app = Application("Reminders");
+const icloud = app.accounts.byName("iCloud");
 const results = {};
 ["Work", "Personal"].forEach(listName => {
-  const list = app.lists.byName(listName);
+  const list = icloud.lists.byName(listName);
   const items = list.reminders.whose({ completed: false })().map(r => ({
     name: r.name(),
     dueDate: r.dueDate() ? r.dueDate().toISOString().split("T")[0] : null
@@ -99,7 +114,8 @@ JSON.stringify(results, null, 2);
 # Single list — replace "Work" with "Personal" as needed
 osascript -l JavaScript -e '
 const app = Application("Reminders");
-const list = app.lists.byName("Work");
+const icloud = app.accounts.byName("iCloud");
+const list = icloud.lists.byName("Work");
 const items = list.reminders.whose({ completed: false })().map(r => ({
   name: r.name(),
   dueDate: r.dueDate() ? r.dueDate().toISOString().split("T")[0] : null
@@ -117,11 +133,12 @@ Search both lists for the closest name match and mark it complete:
 ```bash
 osascript -l JavaScript -e '
 const app = Application("Reminders");
+const icloud = app.accounts.byName("iCloud");
 const target = "Buy coffee";  // replace with actual name
 let found = false;
 ["Work", "Personal"].forEach(listName => {
   if (found) return;
-  const list = app.lists.byName(listName);
+  const list = icloud.lists.byName(listName);
   const matches = list.reminders.whose({ name: target, completed: false })();
   if (matches.length > 0) {
     matches[0].completed = true;
@@ -139,11 +156,12 @@ If no exact match is found, list the incomplete reminders from both lists and as
 ```bash
 osascript -l JavaScript -e '
 const app = Application("Reminders");
+const icloud = app.accounts.byName("iCloud");
 const target = "Buy coffee";  // replace with actual name
 let found = false;
 ["Work", "Personal"].forEach(listName => {
   if (found) return;
-  const list = app.lists.byName(listName);
+  const list = icloud.lists.byName(listName);
   const matches = list.reminders.whose({ name: target })();
   if (matches.length > 0) {
     app.delete(matches[0]);
@@ -158,10 +176,10 @@ found ? "Removed from " + found : "Not found";
 
 | Command | JXA operation | Target |
 |---|---|---|
-| `/todo work <text>` | `list.reminders.push(app.Reminder({name}))` | Work list |
-| `/todo personal <text>` | `list.reminders.push(app.Reminder({name}))` | Personal list |
-| `/todo list` | `reminders.whose({completed: false})()` | Both lists |
-| `/todo list work` | `reminders.whose({completed: false})()` | Work list only |
-| `/todo list personal` | `reminders.whose({completed: false})()` | Personal list only |
+| `/todo work <text>` | `icloud.lists.byName("Work").reminders.push(...)` | Work list (iCloud) |
+| `/todo personal <text>` | `icloud.lists.byName("Personal").reminders.push(...)` | Personal list (iCloud) |
+| `/todo list` | `reminders.whose({completed: false})()` | Both lists (iCloud) |
+| `/todo list work` | `reminders.whose({completed: false})()` | Work list only (iCloud) |
+| `/todo list personal` | `reminders.whose({completed: false})()` | Personal list only (iCloud) |
 | `/todo done <text>` | `reminder.completed = true` | First match in Work, then Personal |
 | `/todo remove <text>` | `app.delete(reminder)` | First match in Work, then Personal |
