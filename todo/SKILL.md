@@ -16,16 +16,22 @@ This skill manages todos in Apple Reminders via JXA (JavaScript for Automation) 
 ## Usage Syntax
 
 ```
-/todo work <description>           — add to Work list
-/todo personal <description>       — add to Personal list
-/todo list                         — show all incomplete todos (both lists)
-/todo list work                    — show only Work todos
-/todo list personal                — show only Personal todos
-/todo done <description>           — mark a todo as complete (searches both lists)
-/todo remove <description>         — delete a todo entirely
+/todo work <description>                    — add to Work list
+/todo work <description> by <date>          — add to Work list with due date
+/todo personal <description>               — add to Personal list
+/todo personal <description> by <date>     — add to Personal list with due date
+/todo list                                  — show all incomplete todos (both lists)
+/todo list work                             — show only Work todos
+/todo list personal                         — show only Personal todos
+/todo done <description>                    — mark a todo as complete (searches both lists)
+/todo remove <description>                  — delete a todo entirely
 ```
 
 The **first argument always determines the action or target list** — never infer or guess which list.
+
+### Date parsing
+
+If the description contains ` by <date>`, extract the date and pass it as `dueDate`. Accept natural formats like `2026-04-10`, `April 10`, `tomorrow`, `next Monday`. Convert to a JavaScript `Date` object before passing to the Reminder. Strip the ` by <date>` part from the reminder name.
 
 ## Important: Always Use the iCloud Account
 
@@ -57,36 +63,28 @@ const existing = icloud.lists().map(l => l.name());
 
 ## Add a Todo
 
+Without due date:
+
 ```bash
-# /todo work Buy coffee
 osascript -l JavaScript -e '
 const app = Application("Reminders");
 const icloud = app.accounts.byName("iCloud");
-const list = icloud.lists.byName("Work");
+const list = icloud.lists.byName("Work");  // or "Personal"
 list.reminders.push(app.Reminder({ name: "Buy coffee" }));
 "Added to Work";
 '
-
-# /todo personal Call mom
-osascript -l JavaScript -e '
-const app = Application("Reminders");
-const icloud = app.accounts.byName("iCloud");
-const list = icloud.lists.byName("Personal");
-list.reminders.push(app.Reminder({ name: "Call mom" }));
-"Added to Personal";
-'
 ```
 
-To add with a **due date**, include it in the Reminder object:
+With due date (parse `by <date>` from user input, strip it from the name):
 
 ```bash
 osascript -l JavaScript -e '
 const app = Application("Reminders");
 const icloud = app.accounts.byName("iCloud");
-const list = icloud.lists.byName("Work");
+const list = icloud.lists.byName("Work");  // or "Personal"
 list.reminders.push(app.Reminder({
   name: "Submit report",
-  dueDate: new Date("2026-04-07T10:00:00")
+  dueDate: new Date("2026-04-10T09:00:00")  // replace with parsed date; default to 9am if no time given
 }));
 "Added to Work";
 '
